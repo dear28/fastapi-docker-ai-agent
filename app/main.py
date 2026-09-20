@@ -1,116 +1,154 @@
+import logging
 import os
+from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status
 from openai import OpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Enterprise AI Agent API",
-    description="Production-ready FastAPI service with structured LLM responses.",
+    title="Process Intelligence AI Agent API",
+    description="FastAPI service for local process analysis using Docker Model Runner and structured Pydantic outputs.",
     version="1.0.0",
 )
 
-# Initialize OpenAI client pointing to Docker Model Runner or custom endpoint
-llm_url = os.getenv(
-    "LLM_URL", "http://model-runner.docker.internal/v1/"
-)  # Fallback to local Docker DNS
-api_key = os.getenv("API_KEY", "not-needed")
-client = OpenAI(base_url=llm_url, api_key=api_key)
+# Configuration from environment with fallback defaults
+LLM_URL = os.getenv("LLM_URL", "http://model-runner.docker.internal:12434/v1").rstrip(
+    "/"
+)
+LLM_MODEL = os.getenv("LLM_MODEL", "ai/smollm2:latest")
+API_KEY = os.getenv("API_KEY", "not-needed")
+
+openai_client = OpenAI(
+    base_url=LLM_URL,
+    api_key=API_KEY,
+)
+
+SYSTEM_PROMPT = (
+    "You are an expert Process Intelligence AI Agent specializing in business process optimization and workflow analysis.\n"
+    "Your primary goal is to analyze operational task descriptions and produce strictly valid JSON outputs.\n\n"
+    "CRITICAL OUTPUT RULES:\n"
+    "1. You MUST respond ONLY with a raw, valid JSON object matching the requested schema.\n"
+    "2. DO NOT wrap the JSON in markdown code blocks (e.g., do NOT use ```json or ```).\n"
+    "3. DO NOT include introductory text, conversational pleasantries, or postscript notes.\n"
+    "4. Ensure all JSON keys and values are properly formatted and escaped."
+)
 
 
-# --- Pydantic Schemas ---
+# Pydantic Schemas
 class AgentRequest(BaseModel):
-    prompt: str = Field(
+    task_description: str = Field(
         ...,
-        description="The query or task description for the AI agent.",
-        example="Analyze the invoice process for missing validation steps.",
+        min_length=10,
+        description="Detailed description of the business process or operational task to analyze.",
+        examples=[
+            "Manual processing of vendor invoices received via email, manual data entry into ERP, and approval routing via email."
+        ],
+    )
+
+
+class ProcessAutomationAssessment(BaseModel):
+    automation_potential: str = Field(
+        ...,
+        description="Potential level of automation (e.g., High, Medium, Low).",
+    )
+    recommended_tech_stack: list[str] = Field(
+        ...,
+        description="Recommended technologies or tools (e.g., Python, RPA, Power Automate, OCR).",
+    )
+    key_bottlenecks: list[str] = Field(
+        ...,
+        description="Identified operational friction points or bottlenecks.",
+    )
+    estimated_complexity: str = Field(
+        ...,
+        description="Complexity level of implementation (e.g., Low, Medium, High).",
+    )
+    summary: str = Field(
+        ...,
+        description="Executive summary of the process analysis and next steps.",
     )
 
 
 class AgentAnalysisResponse(BaseModel):
-    summary: str = Field(..., description="Brief summary of the prompt or task.")
-    complexity: str = Field(
+    status: str = Field(default="success", description="Response status.")
+    model_used: str = Field(..., description="Local LLM model identifier executed.")
+    assessment: ProcessAutomationAssessment = Field(
         ...,
-        description="Estimated process complexity: Low, Medium, or High.",
-    )
-    key_takeaways: list[str] = Field(
-        ..., description="List of 2-3 key findings or actionable steps."
+        description="Structured automation assessment.",
     )
 
 
-# --- System Prompt Definition ---
-SYSTEM_PROMPT = """
-You are an expert Automation & Process Intelligence AI Agent.
-Analyze the user's input and provide a structured assessment.
-
-You MUST respond strictly in raw JSON format with no markdown syntax, no ```json codeblocks, and no extra text.
-The JSON must follow this exact structure:
-{
-    "summary": "Short 1-sentence summary of the input",
-    "complexity": "Low" | "Medium" | "High",
-    "key_takeaways": ["Point 1", "Point 2", "Point 3"]
-}
-"""
-
-
-# --- Endpoints ---
-@app.get("/", tags=["Health"])
-def health_check():
+# Endpoints
+@app.get("/health", status_code=status.HTTP_200_OK)
+def health_check() -> dict[str, str]:
     # Health check endpoint to verify container status.
     return {
-        "status": "ok",
-        "environment": os.getenv("APP_ENV", "development"),
-        "model": os.getenv("LLM_MODEL", "ai/smollm2"),
+        "status": "healthy",
+        "service": "process-intelligence-agent",
+        "model_configured": LLM_MODEL,
     }
 
 
 @app.post(
     "/analyze",
     response_model=AgentAnalysisResponse,
-    tags=["Agent Operations"],
+    status_code=status.HTTP_200_OK,
 )
-def analyze_process(request: AgentRequest):
-    """Analyzes a process request using the local LLM and returns a structured evaluation."""
-    try:
-        model_name = os.getenv("LLM_MODEL", "ai/smollm2")
+def analyze_process(request: AgentRequest) -> AgentAnalysisResponse:
+    prompt = (
+        f"Analyze the following operational process description and return an assessment JSON with keys: "
+        f"'automation_potential', 'recommended_tech_stack' (list), 'key_bottlenecks' (list), "
+        f"'estimated_complexity', and 'summary'.\n\n"
+        f"Process Description:\n{request.task_description}"
+    )
 
-        response = client.chat.completions.create(
-            model=model_name,
+    try:
+        completion = openai_client.chat.completions.create(
+            model=LLM_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": request.prompt},
+                {"role": "user", "content": prompt},
             ],
-            temperature=0.2,  # Low temperature for deterministic/consistent structured outputs
-            max_tokens=250,
+            temperature=0.2,
         )
 
-        raw_content = response.choices[0].message.content.strip()
+        raw_content = completion.choices[0].message.content or ""
+        logger.info(f"Raw LLM Output received: {raw_content!r}")
 
-        # Parse and validate the response against our Pydantic model
-        return AgentAnalysisResponse.model_validate_json(raw_content)
+        # Clean potential markdown wrapping if the local LLM ignores instructions
+        cleaned_content = raw_content.strip()
+        if cleaned_content.startswith("```"):
+            lines = cleaned_content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            cleaned_content = "\n".join(lines).strip()
 
-    except Exception as err:
+        assessment_data = ProcessAutomationAssessment.model_validate_json(
+            cleaned_content
+        )
+
+        return AgentAnalysisResponse(
+            status="success",
+            model_used=LLM_MODEL,
+            assessment=assessment_data,
+        )
+
+    except ValidationError as err:
+        logger.error(f"Pydantic Validation Error: {err!s}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to process agent analysis: {err!s}"
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Local LLM generated invalid structured output schema: {err!s}",
         ) from err
-
-
-# @app.get("/ask")
-# def ask_agent(prompt: str = "What is Docker?"):
-#     # Sends a prompt to the local LLM running in Docker.
-#     try:
-#         model_name = os.getenv("LLM_MODEL", "ai/smollm2")
-#         response = client.chat.completions.create(
-#             model=model_name,
-#             messages=[{"role": "user", "content": prompt}],
-#             max_tokens=150,
-#         )
-#         return {
-#             "prompt": prompt,
-#             "answer": response.choices[0].message.content,
-#             "model_used": model_name,
-#         }
-#     except Exception as err:
-#         raise HTTPException(
-#             status_code=500, detail=f"Failed to connect to LLM: {err!s}"
-#         ) from err
+    except Exception as err:
+        logger.error(f"LLM Runner Execution Error: {err!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error connecting to local Docker Model Runner: {err!s}",
+        ) from err

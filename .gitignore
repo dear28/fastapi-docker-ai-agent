@@ -1,11 +1,14 @@
 # Python
 __pycache__/
 *.py[cod]
-.venv/
-venv/
+*$py.class
 
-# Environment variables (Crucial para no subir claves)
+
+# Environment variables
 .env
+.venv/
+.env/
+venv/
 
 # Logs & Data outputs
 logs/
