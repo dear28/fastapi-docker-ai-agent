@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Process Intelligence AI Agent API",
-    description="FastAPI service for local process analysis using Docker Model Runner and structured Pydantic outputs.",
+    description="Production-ready AI agent service for process automation assessment.",
     version="1.0.0",
 )
 
@@ -37,6 +37,13 @@ SYSTEM_PROMPT = (
     "3. DO NOT include introductory text, conversational pleasantries, or postscript notes.\n"
     "4. Ensure all JSON keys and values are properly formatted and escaped."
 )
+
+
+class HealthCheckResponse(BaseModel):
+    status: str = Field(..., example="ok")
+    environment: str = Field(..., example="development")
+    llm_connectivity: str = Field(..., example="connected")
+    model_used: str = Field(..., example="ai/smollm2:latest")
 
 
 # Pydantic Schemas
@@ -84,13 +91,25 @@ class AgentAnalysisResponse(BaseModel):
 
 
 # Endpoints
-@app.get("/health", status_code=status.HTTP_200_OK)
-def health_check() -> dict[str, str]:
-    # Health check endpoint to verify container status.
+@app.get("/health", response_model=HealthCheckResponse, status_code=status.HTTP_200_OK)
+def health_check() -> HealthCheckResponse:
+    """
+    Healthcheck endpoint to verify API state and LLM service connectivity.
+    """
+    env = os.getenv("APP_ENV", "development")
+
+    try:
+        # Quick ping to verify LLM connection
+        openai_client.models.list()
+        llm_status = "connected"
+    except Exception as e:
+        llm_status = f"disconnected: {e!s}"
+
     return {
-        "status": "healthy",
-        "service": "process-intelligence-agent",
-        "model_configured": LLM_MODEL,
+        "status": "ok",
+        "environment": env,
+        "llm_connectivity": llm_status,
+        "model_used": LLM_MODEL,
     }
 
 
@@ -100,6 +119,11 @@ def health_check() -> dict[str, str]:
     status_code=status.HTTP_200_OK,
 )
 def analyze_process(request: AgentRequest) -> AgentAnalysisResponse:
+    """
+    Analyze an operational task or business process description using a local LLM
+    and return a structured assessment detailing automation potential, bottlenecks,
+    tech stack, and estimated complexity.
+    """
     prompt = (
         f"Analyze the following operational process description and return an assessment JSON with keys: "
         f"'automation_potential', 'recommended_tech_stack' (list), 'key_bottlenecks' (list), "
