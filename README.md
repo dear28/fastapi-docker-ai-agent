@@ -26,7 +26,7 @@ This architecture addresses:
 
 ## Architecture & Stack
 
-* **Python 3.11+:** Core runtime environment
+* **Python 3.13+:** Core runtime environment
 * **FastAPI:** High-performance REST API framework
 * **Pydantic v2:** Data validation and JSON schema enforcement
 * **Docker & Docker Compose:** Container orchestration & environment isolation
