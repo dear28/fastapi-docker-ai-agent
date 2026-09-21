@@ -7,27 +7,31 @@ from openai import OpenAI
 from pydantic import BaseModel, Field, ValidationError
 
 
+# Configure structured logging to output clean, trace-friendly log messages to the container console (stdout)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Initialize FastAPI application with metadata used for automatic OpenAPI/Swagger generation
 app = FastAPI(
     title="Process Intelligence AI Agent API",
     description="Production-ready AI agent service for process automation assessment.",
     version="1.0.0",
 )
 
-# Configuration from environment with fallback defaults
+# Load environment configuration variables following the 12-Factor App standard (decoupling config from code)
 LLM_URL = os.getenv("LLM_URL", "http://model-runner.docker.internal:12434/v1").rstrip(
     "/"
 )
 LLM_MODEL = os.getenv("LLM_MODEL", "ai/smollm2:latest")
 API_KEY = os.getenv("API_KEY", "not-needed")
 
+# Initialize OpenAI client pointed to local Docker Model Runner (Ollama/vLLM compatible endpoint)
 openai_client = OpenAI(
     base_url=LLM_URL,
     api_key=API_KEY,
 )
 
+# System prompt forcing strictly valid JSON responses without conversational filler
 SYSTEM_PROMPT = (
     "You are an expert Process Intelligence AI Agent specializing in business process optimization and workflow analysis.\n"
     "Your primary goal is to analyze operational task descriptions and produce strictly valid JSON outputs.\n\n"
@@ -39,18 +43,18 @@ SYSTEM_PROMPT = (
 )
 
 
+# Pydantic Schemas for Request/Response Data Validation
 class HealthCheckResponse(BaseModel):
-    status: str = Field(..., example="ok")
-    environment: str = Field(..., example="development")
-    llm_connectivity: str = Field(..., example="connected")
-    model_used: str = Field(..., example="ai/smollm2:latest")
+    status: str = Field(..., examples=["ok"])
+    environment: str = Field(..., examples=["development"])
+    llm_connectivity: str = Field(..., examples=["connected"])
+    model_used: str = Field(..., examples=["ai/smollm2:latest"])
 
 
-# Pydantic Schemas
 class AgentRequest(BaseModel):
     task_description: str = Field(
         ...,
-        min_length=10,
+        min_length=10,  # Rejects inputs shorter than 10 characters (HTTP 422)
         description="Detailed description of the business process or operational task to analyze.",
         examples=[
             "Manual processing of vendor invoices received via email, manual data entry into ERP, and approval routing via email."
@@ -90,7 +94,7 @@ class AgentAnalysisResponse(BaseModel):
     )
 
 
-# Endpoints
+# API Endpoints
 @app.get("/health", response_model=HealthCheckResponse, status_code=status.HTTP_200_OK)
 def health_check() -> HealthCheckResponse:
     """
@@ -99,10 +103,11 @@ def health_check() -> HealthCheckResponse:
     env = os.getenv("APP_ENV", "development")
 
     try:
-        # Quick ping to verify LLM connection
+        # Perform a lightweight ping to verify LLM service network availability
         openai_client.models.list()
         llm_status = "connected"
     except Exception as e:
+        # Capture connection failure without crashing the service
         llm_status = f"disconnected: {e!s}"
 
     return {
@@ -124,6 +129,7 @@ def analyze_process(request: AgentRequest) -> AgentAnalysisResponse:
     and return a structured assessment detailing automation potential, bottlenecks,
     tech stack, and estimated complexity.
     """
+    # Construct the user prompt enforcing schema structure expectations
     prompt = (
         f"Analyze the following operational process description and return an assessment JSON with keys: "
         f"'automation_potential', 'recommended_tech_stack' (list), 'key_bottlenecks' (list), "
@@ -132,19 +138,20 @@ def analyze_process(request: AgentRequest) -> AgentAnalysisResponse:
     )
 
     try:
+        # Send the analysis prompt and context rules to the local LLM engine
         completion = openai_client.chat.completions.create(
             model=LLM_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=0.2,  # Low temperature reduces randomness to ensure consistent, deterministic JSON structures
         )
 
         raw_content = completion.choices[0].message.content or ""
         logger.info(f"Raw LLM Output received: {raw_content!r}")
 
-        # Clean potential markdown wrapping if the local LLM ignores instructions
+        # Clean potential markdown block formatting (e.g., ```json ... ```) if emitted by the LLM
         cleaned_content = raw_content.strip()
         if cleaned_content.startswith("```"):
             lines = cleaned_content.splitlines()
@@ -154,6 +161,7 @@ def analyze_process(request: AgentRequest) -> AgentAnalysisResponse:
                 lines = lines[:-1]
             cleaned_content = "\n".join(lines).strip()
 
+        # Parse the raw JSON string and validate its key-value data types against the Pydantic v2 schema
         assessment_data = ProcessAutomationAssessment.model_validate_json(
             cleaned_content
         )
@@ -165,12 +173,14 @@ def analyze_process(request: AgentRequest) -> AgentAnalysisResponse:
         )
 
     except ValidationError as err:
+        # Handle cases where the LLM generated invalid JSON structure or missing fields
         logger.error(f"Pydantic Validation Error: {err!s}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Local LLM generated invalid structured output schema: {err!s}",
         ) from err
     except Exception as err:
+        # Handle general communication errors with the local Docker Model Runner
         logger.error(f"LLM Runner Execution Error: {err!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
