@@ -1,0 +1,68 @@
+version: "3.8"
+
+networks:
+  ai-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  qdrant_data:
+  n8n_global_data:
+    external: true
+
+services:
+  ai-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - LLM_URL=${LLM_URL}
+      - LLM_MODEL=${LLM_MODEL}
+    volumes:
+      - .:/app
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - ai-network
+    restart: unless-stopped
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+    volumes:
+      - n8n_global_data:/home/node/.n8n
+    networks:
+      - ai-network
+    restart: unless-stopped
