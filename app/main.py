@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, status
 from openai import OpenAI
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 
 # Configure structured logging to output clean, trace-friendly log messages to the container console (stdout)
@@ -63,6 +63,11 @@ class AgentRequest(BaseModel):
 
 
 class ProcessAutomationAssessment(BaseModel):
+    """
+    Schema for structuring and validating the LLM's process assessment output.
+    Ensures that the fields returned by the model conform to expected types.
+    """
+
     automation_potential: str = Field(
         ...,
         description="Potential level of automation (e.g., High, Medium, Low).",
@@ -83,6 +88,17 @@ class ProcessAutomationAssessment(BaseModel):
         ...,
         description="Executive summary of the process analysis and next steps.",
     )
+
+    @field_validator("automation_potential", "estimated_complexity", mode="before")
+    @classmethod
+    def coerce_to_string(cls, v):
+        """
+        Pre-validator (mode='before') to handle type inconsistencies from local LLMs.
+        Converts boolean or numeric values (e.g., True, 100) into strings before strict type validation.
+        """
+        if isinstance(v, (bool, int, float)):
+            return str(v)
+        return v
 
 
 class AgentAnalysisResponse(BaseModel):
