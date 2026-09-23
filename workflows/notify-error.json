@@ -1,0 +1,115 @@
+{
+  "name": "NotifyError",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"severity\": \"critical\",\n  \"title\": \"Título de ejemplo del error\",\n  \"sourceWorkflowId\": \"abc123\",\n  \"sourceExecutionId\": \"456\",\n  \"details\": \"Contenido de ejemplo del error\"\n}"
+      },
+      "id": "14b4e342-4c41-4f28-a836-9bc6da3134d4",
+      "typeVersion": 1.1,
+      "name": "ReceiveErrorNotificationRequest",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        1136,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\n\nconst severity = input.severity === 'critical' ? '🚨' : '⚠️';\n\nlet detailsText;\nif (input.details === null || input.details === undefined) {\n  detailsText = 'Sin contenido adicional';\n} else if (typeof input.details === 'object') {\n  detailsText = JSON.stringify(input.details, null, 2);\n} else {\n  detailsText = String(input.details);\n}\nconst safeDetails = detailsText.replace(/`/g, \"'\").slice(0, 2800);\n\n// Dominio base desde variable de entorno o fallback\nconst baseUrl = (typeof $env !== 'undefined' && $env.WEBHOOK_URL)\n  ? $env.WEBHOOK_URL.replace(/\\/$/, '')\n  : 'http://localhost:5678';\n\n// Construcción limpia de la URL hacia la ejecución\nconst executionUrl = `${baseUrl}/workflow/${input.sourceWorkflowId}/executions/${input.sourceExecutionId}`;\n\nconst blocks = [\n  { \n    type: 'header', \n    text: { type: 'plain_text', text: `${severity}${input.title}`, emoji: true } \n  },\n  { \n    type: 'section', \n    text: { type: 'mrkdwn', text: `*Detalle:*\\n\\`\\`\\`${safeDetails}\\`\\`\\`` } \n  },\n  { \n    type: 'context', \n    elements: [\n      { type: 'mrkdwn', text: `<${executionUrl}|🔍 Ver ejecución completa en n8n>` }\n    ] \n  }\n];\n\nreturn [{ json: { blocks } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        368
+      ],
+      "id": "b02a1ae6-6e1c-4685-92c5-9a9480a7a9df",
+      "name": "BuildErrorNotificationBlocks"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BJF500BGF",
+          "mode": "list",
+          "cachedResultName": "nuevo-canal"
+        },
+        "messageType": "block",
+        "blocksUi": "={{ JSON.stringify({ blocks: $json.blocks }) }}",
+        "text": "={{ $('ReceiveErrorNotificationRequest').item.json.title }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        1584,
+        368
+      ],
+      "id": "40a48743-8b6a-4db5-9a16-c38c6805468a",
+      "name": "PostErrorToSlack",
+      "webhookId": "a269c7b6-e4e2-4510-973e-44611fd83301",
+      "credentials": {
+        "slackApi": {
+          "id": "dElicBuadgs66HXO",
+          "name": "Slack API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "# NotifyError\n\nOwned By: Diego Alvarez\nLast Updated: 09/22/2026\n\nReusable error-notification subworkflow. Receives a normalized error payload from any parent workflow and posts a consistently formatted, safely-escaped Slack alert — replacing per-branch Code+Slack duplication.\n\n## Expected Flow\n1. ReceiveErrorNotificationRequest: Execute Workflow Trigger; defines input schema (severity, title, sourceWorkflowId, sourceExecutionId, details)\n2. BuildErrorNotificationBlocks: Normalizes \"details\" (string/object/null-safe), truncates long content, and builds Slack Block Kit JSON\n3. PostErrorToSlack: Sends the message using Message Type \"Blocks\", with blocksUi wrapped as {\"blocks\": [...]}\n\n## Resiliency & Error Handling\n- Safe Serialization: details is JSON.stringify'd and backtick-escaped to prevent block-parsing failures regardless of source content shape\n- Traceability: includes a direct link to the triggering execution in n8n, so the on-call person doesn't have to reconstruct context manually\n- Single Source of Truth: any future fix to Slack formatting/escaping only needs to happen here, not in every calling branch",
+        "height": 800,
+        "width": 752,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        -272
+      ],
+      "id": "6c043a6b-bce3-4b48-8f24-e4387aed351c",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "ReceiveErrorNotificationRequest": {
+      "main": [
+        [
+          {
+            "node": "BuildErrorNotificationBlocks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BuildErrorNotificationBlocks": {
+      "main": [
+        [
+          {
+            "node": "PostErrorToSlack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "1f6a1826-0c74-43f9-bfb0-f27d5003cd3f",
+  "meta": {
+    "instanceId": "d03f42484818ada815060b4c1df260c67ba000b4fa50036b1cf25f0c90398d1f"
+  },
+  "nodeGroups": [],
+  "id": "K7y2L3qr7Hga3VRm",
+  "tags": []
+}

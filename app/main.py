@@ -91,14 +91,32 @@ class ProcessAutomationAssessment(BaseModel):
 
     @field_validator("automation_potential", "estimated_complexity", mode="before")
     @classmethod
-    def coerce_to_string(cls, v):
+    def normalize_level_values(cls, v: Any) -> str:
         """
-        Pre-validator (mode='before') to handle type inconsistencies from local LLMs.
-        Converts boolean or numeric values (e.g., True, 100) into strings before strict type validation.
+        Coimages numeric or messy LLM inputs into standard 'High', 'Medium', or 'Low'.
         """
-        if isinstance(v, (bool, int, float)):
-            return str(v)
-        return v
+        if v is None:
+            return "Medium"
+
+        val_str = str(v).strip().lower()
+
+        if val_str.isdigit():
+            num = int(val_str)
+            if num <= 3 or num == 1:
+                return "Low"
+            elif num <= 7:
+                return "Medium"
+            else:
+                return "High"
+
+        if "high" in val_str:
+            return "High"
+        if "low" in val_str:
+            return "Low"
+        if "med" in val_str:
+            return "Medium"
+
+        return "Medium"  # Predetermined Fallback
 
 
 class AgentAnalysisResponse(BaseModel):
@@ -147,9 +165,12 @@ def analyze_process(request: AgentRequest) -> AgentAnalysisResponse:
     """
     # Construct the user prompt enforcing schema structure expectations
     prompt = (
-        f"Analyze the following operational process description and return an assessment JSON with keys: "
-        f"'automation_potential', 'recommended_tech_stack' (list), 'key_bottlenecks' (list), "
-        f"'estimated_complexity', and 'summary'.\n\n"
+        "Analyze the following operational process description and return an assessment JSON with keys: "
+        "'automation_potential' (MUST be 'High', 'Medium', or 'Low'), "
+        "'recommended_tech_stack' (list of tools), "
+        "'key_bottlenecks' (list of bottlenecks), "
+        "'estimated_complexity' (MUST be 'High', 'Medium', or 'Low'), "
+        "and 'summary'.\n\n"
         f"Process Description:\n{request.task_description}"
     )
 
