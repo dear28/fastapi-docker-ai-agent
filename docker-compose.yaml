@@ -6,7 +6,6 @@ volumes:
   mongodb_data:
   qdrant_data:
   n8n_global_data:
-    external: true
 
 services:
   ai-agent:
@@ -18,12 +17,16 @@ services:
       - "8000:8000"
     environment:
       - APP_ENV=${APP_ENV:-development}
-      - LLM_URL=${LLM_URL}
-      - LLM_MODEL=${LLM_MODEL}
+      - LLM_URL=${LLM_URL:-http://model-runner.docker.internal/v1/}
+      - LLM_MODEL=${LLM_MODEL:-ai/smollm2}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-60.0}
+      - API_KEY=${API_KEY:-not-needed}
     volumes:
       - .:/app
     networks:
       - ai-network
+    extra_hosts:
+      - "model-runner.docker.internal:host-gateway"
     restart: unless-stopped
 
   mongodb:
@@ -55,7 +58,7 @@ services:
     ports:
       - "5678:5678"
     environment:
-      - WEBHOOK_URL=${WEBHOOK_URL}
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678}
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
       - N8N_HOST=localhost
       - N8N_PORT=5678
@@ -65,4 +68,6 @@ services:
       - n8n_global_data:/home/node/.n8n
     networks:
       - ai-network
+    extra_hosts:
+      - "model-runner.docker.internal:host-gateway"
     restart: unless-stopped

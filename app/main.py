@@ -24,11 +24,15 @@ LLM_URL = os.getenv("LLM_URL", "http://model-runner.docker.internal:12434/v1").r
 )
 LLM_MODEL = os.getenv("LLM_MODEL", "ai/smollm2:latest")
 API_KEY = os.getenv("API_KEY", "not-needed")
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60.0"))
 
 # Initialize OpenAI client pointed to local Docker Model Runner (Ollama/vLLM compatible endpoint)
+# Explicit timeout prevents requests from hanging indefinitely if the local model runner stalls
 openai_client = OpenAI(
     base_url=LLM_URL,
     api_key=API_KEY,
+    timeout=LLM_TIMEOUT,
+    max_retries=1,
 )
 
 # System prompt forcing strictly valid JSON responses without conversational filler
@@ -93,7 +97,7 @@ class ProcessAutomationAssessment(BaseModel):
     @classmethod
     def normalize_level_values(cls, v: Any) -> str:
         """
-        Coimages numeric or messy LLM inputs into standard 'High', 'Medium', or 'Low'.
+        Coerces numeric or messy LLM inputs into standard 'High', 'Medium', or 'Low'.
         """
         if v is None:
             return "Medium"
@@ -102,7 +106,7 @@ class ProcessAutomationAssessment(BaseModel):
 
         if val_str.isdigit():
             num = int(val_str)
-            if num <= 3 or num == 1:
+            if num <= 3:
                 return "Low"
             elif num <= 7:
                 return "Medium"
@@ -185,8 +189,14 @@ def analyze_process(request: AgentRequest) -> AgentAnalysisResponse:
             temperature=0.2,  # Low temperature reduces randomness to ensure consistent, deterministic JSON structures
         )
 
+        if not completion.choices:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Local LLM returned no completion choices.",
+            )
+
         raw_content = completion.choices[0].message.content or ""
-        logger.info(f"Raw LLM Output received: {raw_content!r}")
+        logger.debug(f"Raw LLM Output received: {raw_content!r}")
 
         # Clean potential markdown block formatting (e.g., ```json ... ```) if emitted by the LLM
         cleaned_content = raw_content.strip()
@@ -216,6 +226,10 @@ def analyze_process(request: AgentRequest) -> AgentAnalysisResponse:
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Local LLM generated invalid structured output schema: {err!s}",
         ) from err
+    except HTTPException:
+        # Re-raise HTTPExceptions we raised ourselves above (e.g. empty choices) unchanged,
+        # so they aren't swallowed and rewrapped by the generic handler below
+        raise
     except Exception as err:
         # Handle general communication errors with the local Docker Model Runner
         logger.error(f"LLM Runner Execution Error: {err!s}")

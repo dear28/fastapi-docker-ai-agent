@@ -1,0 +1,475 @@
+{
+  "name": "Index Assessment In Vector Store",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://model-runner.docker.internal/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"ai/nomic-embed-text-v1.5\",\n  \"input\": \"Task:{{ $json.task_description }} | Feasibility: {{ $json.assessment_automation_potential }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2016,
+        -96
+      ],
+      "id": "2cdec310-ac89-4953-9950-f3465d129e92",
+      "name": "GenerateAssessmentEmbedding",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/process_assessments/points",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"points\": [\n    {\n      \"id\": {{ Number($execution.id) }},\n      \"vector\": {{ JSON.stringify($json.data[0].embedding) }},\n      \"payload\": {\n        \"task_description\": \"{{ $('ReceiveIndexingRequest').item.json.task_description }}\",\n        \"automation_potential\": \"{{ $('ReceiveIndexingRequest').item.json.assessment_automation_potential }}\",\n        \"summary\": \"{{ $('ReceiveIndexingRequest').item.json.assessment_summary }}\",\n        \"mongo_id\": \"{{ $('ReceiveIndexingRequest').item.json.mongo_id || $('ReceiveIndexingRequest').item.json.mongo_id }}\",\n        \"created_at\": \"{{ $now.toISO() }}\"\n      }\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2240,
+        -192
+      ],
+      "id": "2844c6de-9b2e-4365-b8f9-8cb5a952edad",
+      "name": "UpsertAssessmentToQdrant",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/process_assessments/points/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vector\": {{ JSON.stringify($('GenerateAssessmentEmbedding').item.json.data[0].embedding) }},\n  \"limit\": 3,\n  \"with_payload\": true\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2464,
+        -288
+      ],
+      "id": "a2701a21-b29b-4e15-8c80-04f913e25fff",
+      "name": "SearchSimilarAssessments",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "K7y2L3qr7Hga3VRm",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/K7y2L3qr7Hga3VRm",
+          "cachedResultName": "NotifyError"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "severity": "warning",
+            "title": "Falló la generación del embedding del assessment",
+            "sourceWorkflowId": "={{ $workflow.id }}",
+            "sourceExecutionId": "={{ $execution.id }}",
+            "details": "={{ $json.error?.message ?? JSON.stringify($json) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "severity",
+              "displayName": "severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sourceWorkflowId",
+              "displayName": "sourceWorkflowId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sourceExecutionId",
+              "displayName": "sourceExecutionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "details",
+              "displayName": "details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2240,
+        0
+      ],
+      "id": "4bf2e011-e5e2-4f54-8f97-163d5d6b1aa2",
+      "name": "NotifyEmbeddingGenerationFailed"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "K7y2L3qr7Hga3VRm",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/K7y2L3qr7Hga3VRm",
+          "cachedResultName": "NotifyError"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "severity": "warning",
+            "title": "Falló el upsert del assessment en Qdrant",
+            "sourceWorkflowId": "={{ $workflow.id }}",
+            "sourceExecutionId": "={{ $execution.id }}",
+            "details": "={{ $json.error?.message ?? JSON.stringify($json) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "severity",
+              "displayName": "severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sourceWorkflowId",
+              "displayName": "sourceWorkflowId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sourceExecutionId",
+              "displayName": "sourceExecutionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "details",
+              "displayName": "details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2464,
+        -96
+      ],
+      "id": "83e45add-4ad4-41ca-a35f-25d5f0a09c21",
+      "name": "NotifyQdrantUpsertFailed"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "K7y2L3qr7Hga3VRm",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/K7y2L3qr7Hga3VRm",
+          "cachedResultName": "NotifyError"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "severity": "warning",
+            "title": "Falló la búsqueda de assessments similares en Qdrant",
+            "sourceWorkflowId": "={{ $workflow.id }}",
+            "sourceExecutionId": "={{ $execution.id }}",
+            "details": "={{ $json.error?.message ?? JSON.stringify($json) }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "severity",
+              "displayName": "severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sourceWorkflowId",
+              "displayName": "sourceWorkflowId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sourceExecutionId",
+              "displayName": "sourceExecutionId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "details",
+              "displayName": "details",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2688,
+        -288
+      ],
+      "id": "5827b5c0-8eec-465e-8b78-2ca5b269cf04",
+      "name": "NotifySimilarSearchFailed"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "task_description",
+              "type": "any"
+            },
+            {
+              "name": "assessment_automation_potential",
+              "type": "any"
+            },
+            {
+              "name": "assessment_summary"
+            },
+            {
+              "name": "mongo_id",
+              "type": "any"
+            },
+            {
+              "name": "source_workflow_id",
+              "type": "any"
+            },
+            {
+              "name": "source_execution_id"
+            }
+          ]
+        }
+      },
+      "id": "67baa60a-33ec-4b1c-8513-949f8347a54a",
+      "typeVersion": 1.1,
+      "name": "ReceiveIndexingRequest",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        1808,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# Index Assessment In Vector Store\n\nOwned By: Diego Alvarez\nLast Updated: 09/23/2026\n\nReusable subworkflow that embeds a process assessment and indexes it in Qdrant, enabling semantic similarity search across previously evaluated processes.\n\n## Expected Flow\n1. ReceiveIndexingRequest: Execute Workflow Trigger; receives the assessment content plus sourceWorkflowId/sourceExecutionId for traceability\n2. GenerateAssessmentEmbedding: Generates a vector embedding from the task description and automation potential via the local embedding model\n3. UpsertAssessmentToQdrant: Inserts/updates the assessment vector and payload in the Qdrant collection\n4. SearchSimilarAssessments: Queries Qdrant for previously indexed assessments similar to the current one\n\n## Resiliency & Error Handling\n- Independent Failure Isolation: by the time this subworkflow runs, the assessment is already persisted in MongoDB — failures here degrade semantic search only, not core data integrity, so every branch reports as warning severity\n- Centralized Alerts: each step's Error branch calls the notifyError subworkflow (NotifyEmbeddingGenerationFailed, NotifyQdrantUpsertFailed, NotifySimilarSearchFailed) instead of duplicating Slack logic\n- Traceability: sourceWorkflowId/sourceExecutionId are forwarded from the parent workflow's trigger, so Slack alerts link back to the actual pipeline execution rather than this subworkflow's own run",
+        "height": 1040,
+        "width": 1136,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1744,
+        -848
+      ],
+      "id": "10884da2-2c59-4c2c-af3c-e20168e9cc48",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "GenerateAssessmentEmbedding": {
+      "main": [
+        [
+          {
+            "node": "UpsertAssessmentToQdrant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NotifyEmbeddingGenerationFailed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UpsertAssessmentToQdrant": {
+      "main": [
+        [
+          {
+            "node": "SearchSimilarAssessments",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NotifyQdrantUpsertFailed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SearchSimilarAssessments": {
+      "main": [
+        [],
+        [
+          {
+            "node": "NotifySimilarSearchFailed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ReceiveIndexingRequest": {
+      "main": [
+        [
+          {
+            "node": "GenerateAssessmentEmbedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "abb71b7a-103b-42d7-9d31-88c6a876fa9f",
+  "meta": {
+    "instanceId": "d03f42484818ada815060b4c1df260c67ba000b4fa50036b1cf25f0c90398d1f"
+  },
+  "nodeGroups": [],
+  "id": "5SySr13g9xfRbt5r",
+  "tags": []
+}

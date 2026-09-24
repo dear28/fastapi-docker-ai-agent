@@ -2,17 +2,6 @@
   "name": "AI Assessment Pipeline",
   "nodes": [
     {
-      "parameters": {},
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [
-        0,
-        560
-      ],
-      "id": "3a313b8c-dd4a-42e2-8297-66ef724db26f",
-      "name": "When clicking ‘Execute workflow’"
-    },
-    {
       "parameters": {
         "url": "http://ai-agent:8000/health",
         "options": {}
@@ -20,8 +9,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        224,
-        560
+        448,
+        592
       ],
       "id": "4514c0d0-602d-4e09-ae21-2648a2ace98c",
       "name": "GetFastAPIHealthStatus",
@@ -55,34 +44,11 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        448,
-        464
+        672,
+        496
       ],
       "id": "4667c6dd-ce4c-4f74-92a4-3d98cf90586a",
       "name": "ValidateFastAPIHealth"
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "f5607ffd-9ce4-4a4f-86aa-43cf59db57a4",
-              "name": "task_description",
-              "value": "Procesamiento de facturas electrónicas y extracción de metadatos para registro contable.",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.5,
-      "position": [
-        672,
-        368
-      ],
-      "id": "b95e047d-6b10-46e3-ab6a-b19f9dfa761f",
-      "name": "SetTaskPayload"
     },
     {
       "parameters": {
@@ -96,7 +62,7 @@
           "conditions": [
             {
               "id": "6ff46b8a-890b-45f8-975b-308b76225f40",
-              "leftValue": "={{ $json.task_description }}",
+              "leftValue": "={{ $('ReceiveAssessmentTaskRequest').item.json.body.task_description }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
@@ -106,7 +72,7 @@
             },
             {
               "id": "fff4e5fa-83bd-43bb-834c-0c07297d5136",
-              "leftValue": "={{ $json.task_description ? $json.task_description.length : 0 }}",
+              "leftValue": "={{ $('ReceiveAssessmentTaskRequest').item.json.body.task_description ? $('ReceiveAssessmentTaskRequest').item.json.body.task_description.length : 0 }}",
               "rightValue": 10,
               "operator": {
                 "type": "number",
@@ -122,7 +88,7 @@
       "typeVersion": 2.3,
       "position": [
         896,
-        368
+        400
       ],
       "id": "04e40f9c-7aa3-42d2-b62f-49d76bdf72a8",
       "name": "ValidateTaskPayload"
@@ -133,14 +99,14 @@
         "url": "http://ai-agent:8000/analyze",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"task_description\": \"={{ $json.task_description }}\"\n}",
+        "jsonBody": "={\n  \"task_description\": \"={{ $('ReceiveAssessmentTaskRequest').item.json.body.task_description }}\"\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
         1120,
-        272
+        304
       ],
       "id": "98c16096-cd3e-4c37-814d-faf9536feac3",
       "name": "PostAssessmentRequest",
@@ -187,7 +153,7 @@
       "typeVersion": 2.3,
       "position": [
         1344,
-        176
+        208
       ],
       "id": "ceaf4cd2-b263-490e-bf80-2f59586ec2a0",
       "name": "ValidateAIAssessment"
@@ -199,7 +165,7 @@
             {
               "id": "626d7d43-ffcd-4b98-a145-67fb9d3795b4",
               "name": "task_description",
-              "value": "={{ $('SetTaskPayload').item.json.task_description }}",
+              "value": "={{ $('ReceiveAssessmentTaskRequest').item.json.body.task_description }}",
               "type": "string"
             },
             {
@@ -228,7 +194,7 @@
       "typeVersion": 3.5,
       "position": [
         1568,
-        80
+        112
       ],
       "id": "bf2f0217-fe6b-4daf-bda9-636be78dc292",
       "name": "FormatAssessmentDocument",
@@ -245,7 +211,7 @@
       "typeVersion": 1.5,
       "position": [
         1792,
-        -16
+        16
       ],
       "id": "3d069efd-8270-4396-86ed-4730ffb000ec",
       "name": "SaveAssessmentMongoDB",
@@ -336,8 +302,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        672,
-        560
+        896,
+        592
       ],
       "id": "bf407eae-3381-4a3f-be3d-f9701d4fe286",
       "name": "NotifyFastAPIUnhealthy"
@@ -421,8 +387,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.3,
       "position": [
-        448,
-        656
+        672,
+        688
       ],
       "id": "217ec30b-3bca-44c8-9abd-854b81ed8659",
       "name": "NotifyFastAPIUnreachable"
@@ -507,7 +473,7 @@
       "typeVersion": 1.3,
       "position": [
         1120,
-        464
+        496
       ],
       "id": "3a5ec060-da71-49c8-ba95-9fbddb71f0e0",
       "name": "NotifyInvalidTaskPayload"
@@ -592,7 +558,7 @@
       "typeVersion": 1.2,
       "position": [
         1344,
-        368
+        400
       ],
       "name": "NotifyAssessmentRequestFailed",
       "id": "323e10b2-a8c6-4ffb-b96f-cf66063db68a"
@@ -677,7 +643,7 @@
       "typeVersion": 1.3,
       "position": [
         1568,
-        272
+        304
       ],
       "id": "3928e464-56c4-4f8b-821f-be2028d31bd0",
       "name": "NotifyEmptyAssessment"
@@ -762,7 +728,7 @@
       "typeVersion": 1.3,
       "position": [
         1792,
-        176
+        208
       ],
       "id": "14287afb-18b5-49a7-87d4-fa508536487c",
       "name": "NotifyAssessmentFormatFailed"
@@ -847,41 +813,144 @@
       "typeVersion": 1.3,
       "position": [
         2016,
-        -16
+        112
       ],
       "id": "5411b28e-068d-4812-b418-c65d87d845fc",
       "name": "NotifyAssessmentSaveFailed"
     },
     {
       "parameters": {
-        "content": "# AI Assessment Pipeline\n\nOwned By: Diego Alvarez\nLast Updated: 09/22/2026\n\nProduction-grade pipeline that validates FastAPI/Ollama availability, submits a task for AI-driven automation assessment, and persists the validated result to MongoDB, with centralized error notification at every failure point.\n\n## Expected Flow\n1. GetFastAPIHealthStatus: Checks FastAPI/Ollama service availability\n2. ValidateFastAPIHealth: Confirms the health check reports a healthy status\n3. SetTaskPayload: Builds the task payload for the assessment request\n4. ValidateTaskPayload: Confirms the payload is well-formed before sending\n5. PostAssessmentRequest: Submits the task to the AI assessment service\n6. ValidateAIAssessment: Confirms the AI returned a non-empty, valid assessment\n7. FormatAssessmentDocument: Structures the assessment for storage\n8. SaveAssessmentMongoDB: Persists the final assessment document\n\n## Resiliency & Error Handling\n- Retry on Fail: enabled on HTTP Request nodes to absorb transient network/timeout issues\n- Centralized Alerts: every failure branch (health, payload, request, assessment, format, save) calls the notifyError subworkflow instead of duplicating Slack logic\n- Severity Tiering: critical for infra/data-loss risks (unreachable service, failed save), warning for recoverable/business-logic issues (invalid payload, empty assessment)\n- Global Error Trigger: configured at workflow settings level to catch unanticipated node failures outside the explicit IF branches",
+        "content": "# AI Assessment Pipeline\n\nOwned By: Diego Alvarez\nLast Updated: 09/23/2026\n\nProduction-grade pipeline that validates FastAPI/Ollama availability, submits a task for AI-driven automation assessment, persists the validated result to MongoDB, and indexes it for semantic search — with centralized error notification at every failure point.\n\n## Expected Flow\n1. ReceiveAssessmentTaskRequest: Webhook entry point that receives the task description\n2. GetFastAPIHealthStatus: Checks FastAPI/Ollama service availability\n3. ValidateFastAPIHealth: Confirms the health check reports a healthy status\n4. ValidateTaskPayload: Confirms the incoming webhook payload is well-formed before sending\n5. PostAssessmentRequest: Submits the task to the AI assessment service\n6. ValidateAIAssessment: Confirms the AI returned a non-empty, valid assessment\n7. FormatAssessmentDocument: Structures the assessment for storage\n8. SaveAssessmentMongoDB: Persists the final assessment document\n9. IndexAssessmentInVectorStore: Calls the subworkflow that embeds and indexes the assessment in Qdrant for similarity search\n\n## Resiliency & Error Handling\n- Retry on Fail: enabled on HTTP Request nodes to absorb transient network/timeout issues\n- Centralized Alerts: every failure branch (health, payload, request, assessment, format, save, indexing) calls the notifyError subworkflow instead of duplicating Slack logic\n- Severity Tiering: critical for infra/data-loss risks (unreachable service, failed save), warning for recoverable/business-logic issues (invalid payload, empty assessment, indexing failures)\n- Global Error Trigger: configured at workflow settings level to catch unanticipated node failures outside the explicit IF branches",
         "height": 688,
-        "width": 1824,
+        "width": 1568,
         "color": 6
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        160,
+        384,
         -720
       ],
       "id": "da837674-f57f-41ac-b8bf-1f67ec943617",
       "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "5SySr13g9xfRbt5r",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/5SySr13g9xfRbt5r",
+          "cachedResultName": "Index Assessment In Vector Store"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "assessment_automation_potential": "={{ $json.assessment.automation_potential }}",
+            "task_description": "={{ $json.task_description }}",
+            "assessment_summary": "={{ $json.assessment.summary }}",
+            "mongo_id": "={{ $json.id }}",
+            "source_workflow_id": "={{ $workflow.id }}",
+            "source_execution_id": "={{ $execution.id }}"
+          },
+          "matchingColumns": [
+            "assessment_automation_potential",
+            "task_description",
+            "assessment_summary",
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "task_description",
+              "displayName": "task_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "assessment_automation_potential",
+              "displayName": "assessment_automation_potential",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "assessment_summary",
+              "displayName": "assessment_summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "mongo_id",
+              "displayName": "mongo_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_workflow_id",
+              "displayName": "source_workflow_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_execution_id",
+              "displayName": "source_execution_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2016,
+        -80
+      ],
+      "name": "IndexAssessmentInVectorStore",
+      "id": "530f4ec8-f5d4-417f-8ac9-6da042630b46"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-assessment",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        224,
+        592
+      ],
+      "id": "95387118-c5b7-4f1b-a24b-17e0a4c654fa",
+      "name": "ReceiveAssessmentTaskRequest",
+      "webhookId": "b4d1fbf3-7649-49c7-b98d-75889b946b5e"
     }
   ],
   "pinData": {},
   "connections": {
-    "When clicking ‘Execute workflow’": {
-      "main": [
-        [
-          {
-            "node": "GetFastAPIHealthStatus",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "GetFastAPIHealthStatus": {
       "main": [
         [
@@ -904,7 +973,7 @@
       "main": [
         [
           {
-            "node": "SetTaskPayload",
+            "node": "ValidateTaskPayload",
             "type": "main",
             "index": 0
           }
@@ -912,17 +981,6 @@
         [
           {
             "node": "NotifyFastAPIUnhealthy",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "SetTaskPayload": {
-      "main": [
-        [
-          {
-            "node": "ValidateTaskPayload",
             "type": "main",
             "index": 0
           }
@@ -994,11 +1052,6 @@
         ],
         [
           {
-            "node": "SaveAssessmentMongoDB",
-            "type": "main",
-            "index": 0
-          },
-          {
             "node": "NotifyAssessmentFormatFailed",
             "type": "main",
             "index": 0
@@ -1008,7 +1061,13 @@
     },
     "SaveAssessmentMongoDB": {
       "main": [
-        [],
+        [
+          {
+            "node": "IndexAssessmentInVectorStore",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "NotifyAssessmentSaveFailed",
@@ -1027,6 +1086,17 @@
       "main": [
         []
       ]
+    },
+    "ReceiveAssessmentTaskRequest": {
+      "main": [
+        [
+          {
+            "node": "GetFastAPIHealthStatus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -1038,7 +1108,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "05e1823c-26a3-4ba4-8a64-67e60a7ec49f",
+  "versionId": "8a6c788f-fa95-4f07-a9b7-c9ce91d16866",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "d03f42484818ada815060b4c1df260c67ba000b4fa50036b1cf25f0c90398d1f"
