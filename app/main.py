@@ -6,7 +6,6 @@ from fastapi import FastAPI, HTTPException, status
 from openai import OpenAI
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-
 # Configure structured logging to output clean, trace-friendly log messages to the container console (stdout)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

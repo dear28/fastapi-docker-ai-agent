@@ -2,8 +2,8 @@ import json
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
-from app.main import app, ProcessAutomationAssessment
 
+from app.main import ProcessAutomationAssessment, app
 
 # Initialize the test client bound to our FastAPI app
 # Allows making simulated requests like client.get() or client.post()
