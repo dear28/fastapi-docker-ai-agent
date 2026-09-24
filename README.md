@@ -1,4 +1,4 @@
-# AI Process Assessment & Orchestration Pipeline (FastAPI + n8n + MongoDB)
+# Process Intelligence Pipeline (FastAPI + n8n + MongoDB + Qdrant)
 
 ![AI Assessment Pipeline](assets/ai_assessment_pipeline_main.png)
 ![Notify Error Subworkflow Diagram](assets/notify_error_subworkflow.png)
@@ -125,8 +125,8 @@ To run this AI Agent service in your local Docker environment:
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/dear28/fastapi-docker-ai-agent.git
-cd fastapi-docker-ai-agent
+git clone https://github.com/dear28/process-intelligence-pipeline.git
+cd process-intelligence-pipeline
 ```
 2. **Configure Environment Variables:**
 Copy the example environment template:
