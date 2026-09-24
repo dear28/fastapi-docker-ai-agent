@@ -143,7 +143,7 @@ def health_check() -> HealthCheckResponse:
         # Perform a lightweight ping to verify LLM service network availability
         openai_client.models.list()
         llm_status = "connected"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — healthcheck must never crash regardless of failure cause
         # Capture connection failure without crashing the service
         llm_status = f"disconnected: {e!s}"
 
